@@ -48,6 +48,10 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			printDone=dict(
 				title="Print job finished",
 				body="{file} finished printing in {elapsed_time}"
+			),
+			targetTemperatureReached=dict(
+				title="Target temperature reached",
+				body="{tool} reached temperature {actual}"
 			)
 		)
 
@@ -62,7 +66,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def on_event(self, event, payload):
 
-		if event == Events.PRINT_DONE:
+		if event == Events.PRINT_DONE and self._settings.get(["printDone"]):
 			file = os.path.basename(payload["file"])
 			elapsed_time_in_seconds = payload["time"]
 
@@ -86,6 +90,27 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 					self._logger.warn("Could not send a file message with the webcam image, sending only a note")
 
 			self._send_note(title, body)
+		elif event == Events.TARGET_TEMPERATURE_REACHED and self._settings.get(["targetTemperatureReached"]):
+			tool = payload["tool"]
+			if tool.startswith("B"):
+				tool = "Bed"
+			else:
+				tool = "Extruder %s" % tool
+			target = payload["target"]
+			actual = payload["actual"]
+
+			title = self._settings.get(["targetTemperatureReached", "title"]).format(**locals())
+			body = self._settings.get(["targetTemperatureReached", "body"]).format(**locals())
+
+			self._send_note(title, body)
+		else:
+			# Generic event handling, based on config.yaml settings
+			config_name = event[0].lower() + event[1:]
+			if self._settings.get([config_name]):
+				title = self._settings.get([config_name, "title"]).format(payload)
+				body = self._settings.get([config_name, "body"]).format(payload)
+
+				self._send_note(title, body)
 
 	##~~ Softwareupdate hook
 
