@@ -8,7 +8,7 @@ __copyright__ = "Copyright (C) 2015 The OctoPrint Project - Released under terms
 import os
 
 import octoprint.plugin
-from octoprint.events import Events
+from octoprint.events import all_events, Events
 
 import pushbullet
 
@@ -19,6 +19,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def __init__(self):
 		self._bullet = None
+		self._event_config = dict()  # Maps event name to config section name
 
 	def _connect_bullet(self, apikey):
 		if apikey:
@@ -29,6 +30,12 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			except:
 				self._logger.exception("Error while instantiating PushBullet")
 				return False
+
+	def initialize(self):
+		for event in all_events():
+			config_name = event[0].lower() + event[1:]
+			if self._settings.get([config_name]):
+				self._event_config[event] = config_name
 
 	#~~ StartupPlugin
 
@@ -46,6 +53,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		thread.start()
 
 	def get_settings_defaults(self):
+		# Configuration section names *must* match event name string in Events class,
+		# but with the first letter turned to lowercase; otherwise events will be ignored
 		return dict(
 			access_token=None,
 			printDone=dict(
@@ -68,17 +77,18 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	#~~ EventHandlerPlugin
 
 	def on_event(self, event, payload):
+		if event not in self._event_config:
+			return
 
-		if event == Events.PRINT_DONE and self._settings.get(["printDone"]):
+		note_vars = payload
+		# Derive 'special' variables and/or perform additional actions for select event types
+		if event == Events.PRINT_DONE:
 			file = os.path.basename(payload["file"])
 			elapsed_time_in_seconds = payload["time"]
 
 			import datetime
 			import octoprint.util
 			elapsed_time = octoprint.util.get_formatted_timedelta(datetime.timedelta(seconds=elapsed_time_in_seconds))
-
-			title = self._settings.get(["printDone", "title"]).format(**locals())
-			body = self._settings.get(["printDone", "body"]).format(**locals())
 
 			snapshot_url = self._settings.globalGet(["webcam", "snapshot"])
 			if snapshot_url:
@@ -92,28 +102,22 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 						return
 					self._logger.warn("Could not send a file message with the webcam image, sending only a note")
 
-			self._send_note(title, body)
-		elif event == Events.TARGET_TEMPERATURE_REACHED and self._settings.get(["targetTemperatureReached"]):
+			note_vars = {"file": file, "elapsed_time": elapsed_time}
+		elif event == Events.TARGET_TEMPERATURE_REACHED:
 			tool = payload["tool"]
 			if tool.startswith("B"):
 				tool = "Bed"
 			else:
 				tool = "Extruder %s" % tool
-			target = payload["target"]
-			actual = payload["actual"]
 
-			title = self._settings.get(["targetTemperatureReached", "title"]).format(**locals())
-			body = self._settings.get(["targetTemperatureReached", "body"]).format(**locals())
+			note_vars = {'tool': tool, 'target': payload["target"], "actual": payload["actual"]}
 
-			self._send_note(title, body)
-		else:
-			# Generic event handling, based on config.yaml settings
-			config_name = event[0].lower() + event[1:]
-			if self._settings.get([config_name]):
-				title = self._settings.get([config_name, "title"]).format(payload)
-				body = self._settings.get([config_name, "body"]).format(payload)
+		# Construct note, using variable values, and send it
+		config_name = self._event_config[event]
+		title = self._settings.get([config_name, "title"]).format(note_vars)
+		body = self._settings.get([config_name, "body"]).format(note_vars)
 
-				self._send_note(title, body)
+		self._send_note(title, body)
 
 	##~~ Softwareupdate hook
 
