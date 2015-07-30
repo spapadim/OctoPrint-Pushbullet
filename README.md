@@ -1,3 +1,5 @@
+**HEADS-UP: Needs OctoPrint 1.2.4 or later!**
+
 # OctoPrint Pushbullet Plugin
 
 This is an OctoPrint Plugin that adds support for [Pushbullet notifications](https://www.pushbullet.com/) to OctoPrint.
@@ -11,7 +13,8 @@ of the print result will be captured and included in the notification.
 
 ## Installation
 
-Install via the bundled [Plugin Manager](https://github.com/foosel/OctoPrint/wiki/Plugin:-Plugin-Manager) using this URL:
+Install via the bundled [Plugin Manager](https://github.com/foosel/OctoPrint/wiki/Plugin:-Plugin-Manager) 
+or manually using this URL and the ``--process-dependency-links`` option:
 
     https://github.com/OctoPrint/OctoPrint-Pushbullet/archive/master.zip
 
